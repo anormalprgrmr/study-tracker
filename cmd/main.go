@@ -74,6 +74,10 @@ func main() {
 		}
 
 		if user.Role == "advisor" {
+			if handled, err := advisorH.HandleStartPayload(c); handled || err != nil {
+				return err
+			}
+
 			return c.Send(
 				"👋 خوش برگشتی مشاور!\n\n" +
 					"دستورات:\n" +

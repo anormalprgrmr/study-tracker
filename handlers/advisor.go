@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"strconv"
 	"strings"
@@ -9,11 +10,13 @@ import (
 
 	"study-tracker/db"
 
+	ptime "github.com/yaa110/go-persian-calendar"
 	tele "gopkg.in/telebot.v3"
 )
 
 type AdvisorHandler struct {
-	db *db.DB
+	db          *db.DB
+	botUsername string
 
 	studentBtn      tele.Btn
 	studentsPageBtn tele.Btn
@@ -32,6 +35,9 @@ func NewAdvisorHandler(database *db.DB) *AdvisorHandler {
 }
 
 func (h *AdvisorHandler) Register(b *tele.Bot) {
+	if b.Me != nil {
+		h.botUsername = b.Me.Username
+	}
 	b.Handle("/students", h.listStudents)
 	b.Handle("/monthly", h.monthlyReport)
 	b.Handle("/promote", h.promoteToAdvisor)
@@ -69,7 +75,7 @@ func (h *AdvisorHandler) renderStudentsPage(c tele.Context, page int) error {
 
 	text := h.buildStudentsPageText(students, page, totalPages, totalStudents)
 	markup := h.buildStudentsPageMarkup(students, page, totalPages)
-	return c.EditOrSend(text, markup)
+	return c.EditOrSend(text, markup, tele.ModeHTML)
 }
 
 func (h *AdvisorHandler) buildStudentsPageText(students []db.User, page, totalPages, totalStudents int) string {
@@ -81,18 +87,13 @@ func (h *AdvisorHandler) buildStudentsPageText(students []db.User, page, totalPa
 
 	start := page*studentsPageSize + 1
 	for i, student := range students {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", start+i, studentDisplayName(student)))
+		sb.WriteString(fmt.Sprintf("%d. %s\n", start+i, h.studentReportLink(student, page)))
 	}
 	return sb.String()
 }
 
 func (h *AdvisorHandler) buildStudentsPageMarkup(students []db.User, page, totalPages int) *tele.ReplyMarkup {
 	markup := &tele.ReplyMarkup{}
-
-	for _, student := range students {
-		btn := markup.Data(studentDisplayName(student), h.studentBtn.Unique, strconv.FormatInt(student.TelegramID, 10), strconv.Itoa(page))
-		markup.Inline(markup.Row(btn))
-	}
 
 	var navRow []tele.Btn
 	if page > 0 {
@@ -106,6 +107,24 @@ func (h *AdvisorHandler) buildStudentsPageMarkup(students []db.User, page, total
 	}
 
 	return markup
+}
+
+func (h *AdvisorHandler) HandleStartPayload(c tele.Context) (bool, error) {
+	payload := strings.TrimSpace(c.Data())
+	if payload == "" {
+		return false, nil
+	}
+
+	studentID, studentsPage, ok := parseStudentPayload(payload)
+	if !ok {
+		return false, nil
+	}
+
+	if _, err := h.requireAdvisor(c); err != nil {
+		return true, err
+	}
+
+	return true, h.renderStudentReportsPage(c, studentID, 0, studentsPage)
 }
 
 func (h *AdvisorHandler) openStudentReports(c tele.Context) error {
@@ -199,7 +218,7 @@ func (h *AdvisorHandler) buildStudentReportsText(student db.User, reports []db.D
 	sb.WriteString(fmt.Sprintf("📄 صفحه %d از %d\n\n", page+1, totalPages))
 
 	for i, report := range reports {
-		sb.WriteString(fmt.Sprintf("%d. %s\n", page*reportsPageSize+i+1, report.ReportedAt.Format("2006-01-02 15:04")))
+		sb.WriteString(fmt.Sprintf("%d. %s\n", page*reportsPageSize+i+1, formatJalaliDateTime(report.ReportedAt)))
 		sb.WriteString(fmt.Sprintf("📚 %.1f ساعت | 📝 %d تست\n", report.StudyHours, report.TestCount))
 		sb.WriteString(fmt.Sprintf("💬 %s\n\n", firstN(report.Notes, 80)))
 	}
@@ -246,7 +265,7 @@ func (h *AdvisorHandler) respondCallback(c tele.Context) {
 }
 
 func parseStudentSelection(data string) (studentID int64, studentsPage int, ok bool) {
-	parts := strings.Split(data, "\f")
+	parts := strings.Split(data, "|")
 	if len(parts) != 2 {
 		return 0, 0, false
 	}
@@ -262,7 +281,7 @@ func parseStudentSelection(data string) (studentID int64, studentsPage int, ok b
 }
 
 func parseReportPageData(data string) (studentID int64, reportsPage int, studentsPage int, ok bool) {
-	parts := strings.Split(data, "\f")
+	parts := strings.Split(data, "|")
 	if len(parts) != 3 {
 		return 0, 0, 0, false
 	}
@@ -293,6 +312,39 @@ func studentDisplayName(student db.User) string {
 	return fmt.Sprintf("کاربر %d", student.TelegramID)
 }
 
+func (h *AdvisorHandler) studentReportLink(student db.User, studentsPage int) string {
+	name := html.EscapeString(studentDisplayName(student))
+	if h.botUsername == "" {
+		return name
+	}
+	return fmt.Sprintf(
+		"<a href='https://t.me/%s?start=%s'>%s</a>",
+		h.botUsername,
+		studentPayload(student.TelegramID, studentsPage),
+		name,
+	)
+}
+
+func studentPayload(studentID int64, studentsPage int) string {
+	return fmt.Sprintf("student_%d_%d", studentID, studentsPage)
+}
+
+func parseStudentPayload(payload string) (studentID int64, studentsPage int, ok bool) {
+	parts := strings.Split(payload, "_")
+	if len(parts) != 3 || parts[0] != "student" {
+		return 0, 0, false
+	}
+	studentID, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil {
+		return 0, 0, false
+	}
+	studentsPage, err = strconv.Atoi(parts[2])
+	if err != nil {
+		return 0, 0, false
+	}
+	return studentID, studentsPage, true
+}
+
 func totalPages(total, pageSize int) int {
 	if total <= 0 {
 		return 1
@@ -314,6 +366,19 @@ const (
 	studentsPageSize = 8
 	reportsPageSize  = 5
 )
+
+func formatJalaliDateTime(t time.Time) string {
+	pt := ptime.New(t)
+	year, month, day := pt.Date()
+	hour, minute, _ := pt.Clock()
+	return fmt.Sprintf("%04d/%02d/%02d %02d:%02d", year, int(month), day, hour, minute)
+}
+
+func formatJalaliDate(t time.Time) string {
+	pt := ptime.New(t)
+	year, month, day := pt.Date()
+	return fmt.Sprintf("%04d/%02d/%02d", year, int(month), day)
+}
 
 // /monthly <studentID> [YYYY-MM]
 // Example: /monthly 123456789 2026-06
@@ -383,7 +448,7 @@ func (h *AdvisorHandler) monthlyReport(c tele.Context) error {
 
 	sb.WriteString("📋 جزئیات روزانه:\n")
 	for _, r := range reports {
-		day := r.ReportedAt.Format("01/02")
+		day := formatJalaliDate(r.ReportedAt)
 		note := ""
 		if r.Notes != "" {
 			note = " — " + firstN(r.Notes, 40)

@@ -282,7 +282,12 @@ func (d *DB) SeedMockData() error {
 		"مرور فیزیک با تمرکز روی مباحث ضعف.",
 	}
 
-	baseDate := time.Now().AddDate(0, 0, -14)
+	loc, err := time.LoadLocation("Asia/Tehran")
+	if err != nil {
+		loc = time.Local
+	}
+	now := time.Now().In(loc)
+	baseDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, -14)
 	for i, student := range mockStudents {
 		if _, err := userStmt.Exec(student.TelegramID, student.Username, student.FullName); err != nil {
 			return err
@@ -290,7 +295,7 @@ func (d *DB) SeedMockData() error {
 
 		days := 6 + (i % 6)
 		for day := 0; day < days; day++ {
-			reportTime := baseDate.AddDate(0, 0, day).Add(time.Duration((i+day)%5+16) * time.Hour)
+			reportTime := baseDate.AddDate(0, 0, day).Add(time.Duration((i+day)%5+16)*time.Hour + time.Duration((i*13+day*7)%60)*time.Minute)
 			studyHours := 2.5 + float64((i+day)%5)*0.75
 			testCount := 20 + ((i*7 + day*11) % 55)
 			note := notes[(i+day)%len(notes)]

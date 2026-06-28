@@ -18,6 +18,8 @@ type AdvisorHandler struct {
 	db          *db.DB
 	botUsername string
 
+	studentsMenuBtn tele.Btn
+	helpMenuBtn     tele.Btn
 	studentBtn      tele.Btn
 	studentsPageBtn tele.Btn
 	reportPageBtn   tele.Btn
@@ -27,6 +29,8 @@ type AdvisorHandler struct {
 func NewAdvisorHandler(database *db.DB) *AdvisorHandler {
 	return &AdvisorHandler{
 		db:              database,
+		studentsMenuBtn: tele.Btn{Text: "👥 دانش‌آموزها"},
+		helpMenuBtn:     tele.Btn{Text: "📘 راهنمای مشاور"},
 		studentBtn:      tele.Btn{Unique: "advisor_student"},
 		studentsPageBtn: tele.Btn{Unique: "advisor_students_page"},
 		reportPageBtn:   tele.Btn{Unique: "advisor_reports_page"},
@@ -42,10 +46,39 @@ func (h *AdvisorHandler) Register(b *tele.Bot) {
 	b.Handle("/student", h.openStudentByCommand)
 	b.Handle("/monthly", h.monthlyReport)
 	b.Handle("/promote", h.promoteToAdvisor)
+	b.Handle(&h.studentsMenuBtn, h.listStudents)
+	b.Handle(&h.helpMenuBtn, h.showAdvisorHelp)
 	b.Handle(&h.studentBtn, h.openStudentReports)
 	b.Handle(&h.studentsPageBtn, h.changeStudentsPage)
 	b.Handle(&h.reportPageBtn, h.changeReportPage)
 	b.Handle(&h.backBtn, h.backToStudents)
+}
+
+func (h *AdvisorHandler) MainMenu() *tele.ReplyMarkup {
+	menu := &tele.ReplyMarkup{
+		ResizeKeyboard: true,
+		IsPersistent:   true,
+	}
+	menu.Reply(
+		menu.Row(h.studentsMenuBtn),
+		menu.Row(h.helpMenuBtn),
+	)
+	return menu
+}
+
+func (h *AdvisorHandler) showAdvisorHelp(c tele.Context) error {
+	if _, err := h.requireAdvisor(c); err != nil {
+		return err
+	}
+
+	return c.Send(
+		"دستورات مشاور:\n"+
+			"/students - لیست دانش‌آموزها\n"+
+			"/student <studentID> [page] - مشاهده گزارش‌های یک دانش‌آموز\n"+
+			"/monthly <studentID> [YYYY-MM] - گزارش ماهانه\n"+
+			"/promote <userID> - ارتقای کاربر به مشاور",
+		h.MainMenu(),
+	)
 }
 
 // /students — list all registered students

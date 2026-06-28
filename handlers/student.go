@@ -23,19 +23,34 @@ type StudentHandler struct {
 	bot    *tele.Bot
 	mu     sync.Mutex
 	states map[int64]*studentState // keyed by telegram user ID
+
+	reportMenuBtn tele.Btn
 }
 
 func NewStudentHandler(database *db.DB, bot *tele.Bot) *StudentHandler {
 	return &StudentHandler{
-		db:     database,
-		bot:    bot,
-		states: make(map[int64]*studentState),
+		db:            database,
+		bot:           bot,
+		states:        make(map[int64]*studentState),
+		reportMenuBtn: tele.Btn{Text: "📝 ثبت گزارش"},
 	}
 }
 
 func (h *StudentHandler) Register(b *tele.Bot) {
 	b.Handle("/report", h.startReport)
+	b.Handle(&h.reportMenuBtn, h.startReport)
 	b.Handle(tele.OnText, h.handleText)
+}
+
+func (h *StudentHandler) MainMenu() *tele.ReplyMarkup {
+	menu := &tele.ReplyMarkup{
+		ResizeKeyboard: true,
+		IsPersistent:   true,
+	}
+	menu.Reply(
+		menu.Row(h.reportMenuBtn),
+	)
+	return menu
 }
 
 func (h *StudentHandler) startReport(c tele.Context) error {

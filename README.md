@@ -66,6 +66,7 @@ study-tracker/
 | -------------------------------- | ---------------------------- |
 | `/students`                      | List all registered students |
 | `/monthly <studentID> [YYYY-MM]` | Generate monthly report      |
+| `/mockdata`                      | Seed mock students/reports   |
 | `/promote <userID>`              | Promote a user to advisor    |
 
 Example:
@@ -144,6 +145,18 @@ or
 
 ```bash
 go run main.go
+```
+
+Seed mock data without opening Telegram:
+
+```bash
+go run ./cmd/seedmock -db ./data.db
+```
+
+Or with Task:
+
+```bash
+task seed-mock
 ```
 
 ---

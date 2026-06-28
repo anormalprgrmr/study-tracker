@@ -225,3 +225,89 @@ func (d *DB) GetStudentReportsPage(studentID int64, limit, offset int) ([]DailyR
 	}
 	return reports, rows.Err()
 }
+
+func (d *DB) SeedMockData() error {
+	tx, err := d.conn.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	mockStudents := []User{
+		{TelegramID: 900001, Username: "sara_ahmadi", FullName: "Sara Ahmadi"},
+		{TelegramID: 900002, Username: "amir_hosseini", FullName: "Amir Hosseini"},
+		{TelegramID: 900003, Username: "nazanin_moradi", FullName: "Nazanin Moradi"},
+		{TelegramID: 900004, Username: "ali_karimi", FullName: "Ali Karimi"},
+		{TelegramID: 900005, Username: "parsa_jalili", FullName: "Parsa Jalili"},
+		{TelegramID: 900006, Username: "fatemeh_rostami", FullName: "Fatemeh Rostami"},
+		{TelegramID: 900007, Username: "mahdi_shiri", FullName: "Mahdi Shiri"},
+		{TelegramID: 900008, Username: "yasaman_nikoo", FullName: "Yasaman Nikoo"},
+		{TelegramID: 900009, Username: "armin_davari", FullName: "Armin Davari"},
+		{TelegramID: 900010, Username: "zahra_motiei", FullName: "Zahra Motiei"},
+		{TelegramID: 900011, Username: "erfan_taheri", FullName: "Erfan Taheri"},
+		{TelegramID: 900012, Username: "melika_noori", FullName: "Melika Noori"},
+	}
+
+	userStmt, err := tx.Prepare(`
+		INSERT INTO users (telegram_id, username, full_name, role)
+		VALUES (?, ?, ?, 'student')
+		ON CONFLICT(telegram_id) DO UPDATE SET
+			username = excluded.username,
+			full_name = excluded.full_name
+	`)
+	if err != nil {
+		return err
+	}
+	defer userStmt.Close()
+
+	reportStmt, err := tx.Prepare(`
+		INSERT INTO daily_reports (student_id, study_hours, test_count, notes, reported_at)
+		SELECT ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1
+			FROM daily_reports
+			WHERE student_id = ? AND date(reported_at) = date(?)
+		)
+	`)
+	if err != nil {
+		return err
+	}
+	defer reportStmt.Close()
+
+	notes := []string{
+		"مرور زیست و حل تست زمان‌دار.",
+		"جمع‌بندی ریاضی و بررسی غلط‌ها.",
+		"مطالعه مفهومی شیمی و خلاصه‌نویسی.",
+		"تمرین ادبیات و تحلیل آزمون.",
+		"مرور فیزیک با تمرکز روی مباحث ضعف.",
+	}
+
+	baseDate := time.Now().AddDate(0, 0, -14)
+	for i, student := range mockStudents {
+		if _, err := userStmt.Exec(student.TelegramID, student.Username, student.FullName); err != nil {
+			return err
+		}
+
+		days := 6 + (i % 6)
+		for day := 0; day < days; day++ {
+			reportTime := baseDate.AddDate(0, 0, day).Add(time.Duration((i+day)%5+16) * time.Hour)
+			studyHours := 2.5 + float64((i+day)%5)*0.75
+			testCount := 20 + ((i*7 + day*11) % 55)
+			note := notes[(i+day)%len(notes)]
+
+			if _, err := reportStmt.Exec(
+				student.TelegramID,
+				studyHours,
+				testCount,
+				note,
+				reportTime,
+				student.TelegramID,
+				reportTime,
+			); err != nil {
+				return err
+			}
+		}
+	}
+
+	return tx.Commit()
+}

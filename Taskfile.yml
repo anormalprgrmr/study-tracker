@@ -15,3 +15,7 @@ tasks:
     desc: Build project in .build directory
     cmds:
       - GOOS=linux GOARCH=amd64 go build -o .build/bot cmd/main.go
+  seed-mock:
+    desc: Seed mock students and reports into the local database
+    cmds:
+      - go run ./cmd/seedmock -db ./data.db

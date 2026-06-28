@@ -82,6 +82,40 @@ func (d *DB) GetAllStudents() ([]User, error) {
 	return d.getUsersByRole("student")
 }
 
+func (d *DB) CountStudents() (int, error) {
+	row := d.conn.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'student'`)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (d *DB) GetStudentsPage(limit, offset int) ([]User, error) {
+	rows, err := d.conn.Query(
+		`SELECT telegram_id, username, full_name, role, created_at
+		 FROM users
+		 WHERE role = 'student'
+		 ORDER BY COALESCE(NULLIF(full_name, ''), NULLIF(username, ''), CAST(telegram_id AS TEXT)) COLLATE NOCASE ASC
+		 LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.TelegramID, &u.Username, &u.FullName, &u.Role, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
 func (d *DB) GetAllAdvisors() ([]User, error) {
 	return d.getUsersByRole("advisor")
 }
@@ -148,6 +182,39 @@ func (d *DB) GetMonthlyReports(studentID int64, year, month int) ([]DailyReport,
 		return nil, err
 	}
 	defer rows.Close()
+	var reports []DailyReport
+	for rows.Next() {
+		var r DailyReport
+		if err := rows.Scan(&r.ID, &r.StudentID, &r.StudyHours, &r.TestCount, &r.Notes, &r.ReportedAt); err != nil {
+			return nil, err
+		}
+		reports = append(reports, r)
+	}
+	return reports, rows.Err()
+}
+
+func (d *DB) CountReportsByStudent(studentID int64) (int, error) {
+	row := d.conn.QueryRow(`SELECT COUNT(*) FROM daily_reports WHERE student_id = ?`, studentID)
+	var count int
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (d *DB) GetStudentReportsPage(studentID int64, limit, offset int) ([]DailyReport, error) {
+	rows, err := d.conn.Query(`
+        SELECT id, student_id, study_hours, test_count, notes, reported_at
+        FROM daily_reports
+        WHERE student_id = ?
+        ORDER BY reported_at DESC
+        LIMIT ? OFFSET ?
+    `, studentID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	var reports []DailyReport
 	for rows.Next() {
 		var r DailyReport

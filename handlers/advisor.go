@@ -39,6 +39,7 @@ func (h *AdvisorHandler) Register(b *tele.Bot) {
 		h.botUsername = b.Me.Username
 	}
 	b.Handle("/students", h.listStudents)
+	b.Handle("/student", h.openStudentByCommand)
 	b.Handle("/monthly", h.monthlyReport)
 	b.Handle("/promote", h.promoteToAdvisor)
 	b.Handle(&h.studentBtn, h.openStudentReports)
@@ -109,28 +110,38 @@ func (h *AdvisorHandler) buildStudentsPageMarkup(students []db.User, page, total
 	return markup
 }
 
-func (h *AdvisorHandler) HandleStartPayload(c tele.Context) (bool, error) {
-	payload := strings.TrimSpace(c.Data())
-	if payload == "" {
-		return false, nil
-	}
-
-	studentID, studentsPage, ok := parseStudentPayload(payload)
+func (h *AdvisorHandler) HandleStudentPayload(c tele.Context) (bool, error) {
+	studentID, studentsPage, ok := parseStudentPayload(strings.TrimSpace(c.Data()))
 	if !ok {
 		return false, nil
 	}
+	return true, h.renderStudentReportsForAdvisor(c, studentID, 0, studentsPage)
+}
 
-	if _, err := h.requireAdvisor(c); err != nil {
-		return true, err
+func (h *AdvisorHandler) openStudentByCommand(c tele.Context) error {
+	args := c.Args()
+	if len(args) == 0 {
+		return c.Send("استفاده: /student <studentID> [studentsPage]")
 	}
 
-	return true, h.renderStudentReportsPage(c, studentID, 0, studentsPage)
+	var studentID int64
+	if _, err := fmt.Sscan(args[0], &studentID); err != nil {
+		return c.Send("⚠️ شناسه دانش‌آموز معتبر نیست.")
+	}
+
+	studentsPage := 0
+	if len(args) >= 2 {
+		page, err := strconv.Atoi(args[1])
+		if err != nil {
+			return c.Send("⚠️ شماره صفحه معتبر نیست.")
+		}
+		studentsPage = page
+	}
+
+	return h.renderStudentReportsForAdvisor(c, studentID, 0, studentsPage)
 }
 
 func (h *AdvisorHandler) openStudentReports(c tele.Context) error {
-	if _, err := h.requireAdvisor(c); err != nil {
-		return err
-	}
 	defer h.respondCallback(c)
 
 	studentID, studentsPage, ok := parseStudentSelection(c.Data())
@@ -138,7 +149,7 @@ func (h *AdvisorHandler) openStudentReports(c tele.Context) error {
 		return c.Send("اطلاعات دانش‌آموز نامعتبر است.")
 	}
 
-	return h.renderStudentReportsPage(c, studentID, 0, studentsPage)
+	return h.renderStudentReportsForAdvisor(c, studentID, 0, studentsPage)
 }
 
 func (h *AdvisorHandler) changeStudentsPage(c tele.Context) error {
@@ -155,9 +166,6 @@ func (h *AdvisorHandler) changeStudentsPage(c tele.Context) error {
 }
 
 func (h *AdvisorHandler) changeReportPage(c tele.Context) error {
-	if _, err := h.requireAdvisor(c); err != nil {
-		return err
-	}
 	defer h.respondCallback(c)
 
 	studentID, reportsPage, studentsPage, ok := parseReportPageData(c.Data())
@@ -165,7 +173,7 @@ func (h *AdvisorHandler) changeReportPage(c tele.Context) error {
 		return c.Send("اطلاعات صفحه گزارش نامعتبر است.")
 	}
 
-	return h.renderStudentReportsPage(c, studentID, reportsPage, studentsPage)
+	return h.renderStudentReportsForAdvisor(c, studentID, reportsPage, studentsPage)
 }
 
 func (h *AdvisorHandler) backToStudents(c tele.Context) error {
@@ -179,6 +187,13 @@ func (h *AdvisorHandler) backToStudents(c tele.Context) error {
 		page = 0
 	}
 	return h.renderStudentsPage(c, page)
+}
+
+func (h *AdvisorHandler) renderStudentReportsForAdvisor(c tele.Context, studentID int64, reportsPage, studentsPage int) error {
+	if _, err := h.requireAdvisor(c); err != nil {
+		return err
+	}
+	return h.renderStudentReportsPage(c, studentID, reportsPage, studentsPage)
 }
 
 func (h *AdvisorHandler) renderStudentReportsPage(c tele.Context, studentID int64, reportsPage, studentsPage int) error {
@@ -315,7 +330,7 @@ func studentDisplayName(student db.User) string {
 func (h *AdvisorHandler) studentReportLink(student db.User, studentsPage int) string {
 	name := html.EscapeString(studentDisplayName(student))
 	if h.botUsername == "" {
-		return name
+		return fmt.Sprintf("/student %d %d", student.TelegramID, studentsPage)
 	}
 	return fmt.Sprintf(
 		"<a href='https://t.me/%s?start=%s'>%s</a>",

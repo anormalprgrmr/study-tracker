@@ -74,7 +74,7 @@ func main() {
 		}
 
 		if user.Role == "advisor" {
-			if handled, err := advisorH.HandleStartPayload(c); handled || err != nil {
+			if handled, err := advisorH.HandleStudentPayload(c); handled || err != nil {
 				return err
 			}
 

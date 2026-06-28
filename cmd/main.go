@@ -89,5 +89,12 @@ func main() {
 		)
 	})
 
+	bot.Handle("/id", func(c tele.Context) error {
+		return c.Send(
+			"آیدی عددی شما 👇\n\n" +
+				fmt.Sprintf("%d", c.Sender().ID),
+		)
+	})
+
 	bot.Start()
 }

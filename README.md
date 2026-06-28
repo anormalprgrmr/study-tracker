@@ -167,6 +167,63 @@ The project uses a local SQLite database.
 
 The database file (`data.db`) is created automatically on first run.
 
+### Schema Overview
+
+The app currently uses 2 main tables:
+
+#### `users`
+
+Stores every Telegram user that has interacted with the bot.
+
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| `telegram_id` | `INTEGER` | Primary key. Telegram numeric user ID. |
+| `username` | `TEXT` | Telegram username, if available. |
+| `full_name` | `TEXT` | User's display name. |
+| `role` | `TEXT` | User role, default is `student`. Can also be `advisor`. |
+| `created_at` | `DATETIME` | Record creation time. |
+
+#### `daily_reports`
+
+Stores each student's daily study submission.
+
+| Column | Type | Description |
+| ------ | ---- | ----------- |
+| `id` | `INTEGER` | Primary key with auto-increment. |
+| `student_id` | `INTEGER` | Foreign key to `users.telegram_id`. |
+| `study_hours` | `REAL` | Number of hours studied. |
+| `test_count` | `INTEGER` | Number of tests solved. |
+| `notes` | `TEXT` | Optional daily notes. |
+| `reported_at` | `DATETIME` | Time the report was submitted. |
+
+### Relationship
+
+- One user can have many daily reports.
+- Each row in `daily_reports` belongs to exactly one student.
+- Foreign keys are enabled in SQLite, so `daily_reports.student_id` must match an existing user.
+
+### Example SQL
+
+```sql
+CREATE TABLE users (
+    telegram_id INTEGER PRIMARY KEY,
+    username    TEXT,
+    full_name   TEXT,
+    role        TEXT NOT NULL DEFAULT 'student',
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE daily_reports (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id   INTEGER NOT NULL,
+    study_hours  REAL    NOT NULL,
+    test_count   INTEGER NOT NULL,
+    notes        TEXT,
+    reported_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (student_id) REFERENCES users(telegram_id)
+);
+```
+
 ---
 
 ## Built With

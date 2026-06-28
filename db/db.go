@@ -147,6 +147,15 @@ func (d *DB) SaveReport(r DailyReport) error {
 	return err
 }
 
+func (d *DB) UpdateReport(r DailyReport) error {
+	_, err := d.conn.Exec(`
+        UPDATE daily_reports
+        SET study_hours = ?, test_count = ?, notes = ?
+        WHERE id = ? AND student_id = ?
+    `, r.StudyHours, r.TestCount, r.Notes, r.ID, r.StudentID)
+	return err
+}
+
 // GetTodayReport returns today's report for a student if it exists.
 func (d *DB) GetTodayReport(studentID int64) (*DailyReport, error) {
 	row := d.conn.QueryRow(`

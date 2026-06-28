@@ -59,6 +59,7 @@ study-tracker/
 | --------- | ------------------------------------ |
 | `/start`  | Register and display welcome message |
 | `/report` | Submit today's study report          |
+| `/report_edit` | Edit today's study report      |
 
 ### Advisor Commands
 
